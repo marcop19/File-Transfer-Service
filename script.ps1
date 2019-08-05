@@ -173,7 +173,7 @@ Function Download {
 }
 
 # Recupero i parametri da file di configurazione
-$XMLPath = "d:\progetti\AG_Ftpservice\config.xml"
+$XMLPath = "config.xml"
 $xml = [xml](Get-Content $XMLPath)
 
 # Inizializzo file di log
