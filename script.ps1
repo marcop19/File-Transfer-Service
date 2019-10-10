@@ -59,6 +59,7 @@ Function Connection {
 }
 
 Function Upload {
+    Param([string]$ExportLocalPath, [string]$ExportRemotePath, [string]$BackupExportLocalPath, [string]$FileExtension) 
         
     # Inizializzo la connessione
     $session = Connection $xml.Configuration.Connection.Hostname `
@@ -70,19 +71,24 @@ Function Upload {
       $xml.Configuration.Connection.Timeout
 
     Try {
+        # Controllo estensione
+        If ($FileExtension -eq "") {
+            $FileExtension = "*"
+        }
+
         # Imposto il resume ad off
         $transferOptions = New-Object WinSCP.TransferOptions
         $transferOptions.ResumeSupport.State = [WinSCP.TransferResumeSupportState]::Off
 
         $suffix = "_filepart"
 
-        $files = Get-ChildItem ($xml.Configuration.Directory.ExportLocalPath + "*.$($xml.Configuration.Service.FileExtension)")
+        $files = Get-ChildItem ($ExportLocalPath + "*.$($FileExtension)")
         foreach ($fileInfo in $files) { 
 
             # Effettuo l'upload e calcolo il tempo che impiega
             $time = (Measure-Command { 
               $session.PutFiles($fileInfo, `
-                $xml.Configuration.Directory.ExportRemotePath + $fileInfo.Name + $suffix, `
+                $ExportRemotePath + $fileInfo.Name + $suffix, `
                 $False, `
                 $transferOptions).Check()  
             }).TotalSeconds
@@ -91,8 +97,8 @@ Function Upload {
 
             # Rinomimo il file ripristinando il suffisso originale
             $time = (Measure-Command { 
-              $a = $xml.Configuration.Directory.ExportRemotePath + $fileInfo.Name + $suffix
-              $b = $xml.Configuration.Directory.ExportRemotePath + $fileInfo.Name
+              $a = $ExportRemotePath + $fileInfo.Name + $suffix
+              $b = $ExportRemotePath + $fileInfo.Name
 
               $session.MoveFile($a, $b)
             }).TotalSeconds
@@ -101,7 +107,7 @@ Function Upload {
             LogWrite "INFO" "Rename $($fileInfo.Name + $suffix) in $($fileInfo.Name) OK ($($time) seconds)"
                             
             # Provo a spostare il sorgente nella cartella di backup
-            Move-Item $fileInfo $xml.Configuration.Directory.BackupExportLocalPath -Force -ErrorAction Stop
+            Move-Item $fileInfo $BackupExportLocalPath -Force -ErrorAction Stop
         }
     }
    
@@ -117,7 +123,8 @@ Function Upload {
 }
 
 Function Download {
-    
+    Param([string]$ImportLocalPath, [string]$ImportRemotePath, [string]$BackupImportLocalPath, [string]$FileExtension)
+
     # Inizializzo la connessione
     $session = Connection $xml.Configuration.Connection.Hostname `
       $xml.Configuration.Connection.Username `
@@ -130,23 +137,23 @@ Function Download {
     $suffix = "_filepart"
 
     Try {
-        $files = $session.EnumerateRemoteFiles($xml.Configuration.Directory.ImportRemotePath, `
-          "*.$($xml.Configuration.Service.FileExtension)" , [WinSCP.EnumerationOptions]::None)
+        $files = $session.EnumerateRemoteFiles($ImportRemotePath, `
+          "*.$($FileExtension)" , [WinSCP.EnumerationOptions]::None)
 
         foreach ($fileInfo in $files) {
 
             # Download file
             $time = (Measure-Command { 
-                $session.GetFiles($xml.Configuration.Directory.ImportRemotePath + $fileInfo, `
-                $xml.Configuration.Directory.ImportLocalPath + $fileInfo + $suffix).Check()
+                $session.GetFiles($ImportRemotePath + $fileInfo, `
+                $ImportLocalPath + $fileInfo + $suffix).Check()
         
                 # Se esiste un file con lo stesso nome lo cancello
-                if (Test-Path -Path ($xml.Configuration.Directory.ImportLocalPath + $fileInfo)) {
-                    Remove-Item ($xml.Configuration.Directory.ImportLocalPath + $fileInfo)
+                if (Test-Path -Path ($ImportLocalPath + $fileInfo)) {
+                    Remove-Item ($ImportLocalPath + $fileInfo)
                 }
             
-                Rename-Item ($xml.Configuration.Directory.ImportLocalPath + $fileInfo + $suffix) `
-                ($xml.Configuration.Directory.ImportLocalPath + $fileInfo)
+                Rename-Item ($ImportLocalPath + $fileInfo + $suffix) `
+                ($ImportLocalPath + $fileInfo)
             }).TotalSeconds
 
             LogWrite "INFO" "Download $($fileInfo) OK ($($time) seconds)"
@@ -173,19 +180,28 @@ Function Download {
 }
 
 # Recupero i parametri da file di configurazione
-$XMLPath = "config.xml"
+$XMLPath = "E:\Progetti\File-Transfer-Service\config.xml"
 $xml = [xml](Get-Content $XMLPath)
 
 # Inizializzo file di log
-$Logfile = $xml.Configuration.Directory.LogPath + "$(Get-Date -f yyyy-MM-dd).log"
+$Logfile = $xml.Configuration.Service.LogPath + "$(Get-Date -f yyyy-MM-dd).log"
 
-# Avvio esportazione se attivo in configurazione
-If ($xml.Configuration.Service.ExportService -eq "Yes") {
-    Upload
+#Avvio i job precaricati nell'xml
+foreach ($job in $xml.Configuration.Jobs.ChildNodes) {
+    
+    # Controllo se il job è attivo
+    If ($job.Active -eq "Y") {
+        
+        # Avvio job di tipo upload (Type = U)
+        If ($job.Type -eq "U") {
+            Upload $job.LocalPath $job.RemotePath $job.BackupLocalPath $job.FileExtension
+        }
+
+        # Avvio job fi tipo donwload (Type = D)
+        If ($job.Type -eq "D") {
+            Download $job.LocalPath $job.RemotePath $job.BackupLocalPath $job.FileExtension
+        }
+
+    }
+    
 }
-
-# Avvio importazione se attivo in configurazione
-If ($xml.Configuration.Service.ImportService -eq "Yes") {
-    Download
-}
-
