@@ -197,7 +197,7 @@ foreach ($job in $xml.Configuration.Jobs.ChildNodes) {
             Upload $job.LocalPath $job.RemotePath $job.BackupLocalPath $job.FileExtension
         }
 
-        # Avvio job fi tipo donwload (Type = D)
+        # Avvio job di tipo download (Type = D)
         If ($job.Type -eq "D") {
             Download $job.LocalPath $job.RemotePath $job.BackupLocalPath $job.FileExtension
         }
