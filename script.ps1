@@ -180,7 +180,7 @@ Function Download {
 }
 
 # Recupero i parametri da file di configurazione
-$XMLPath = "E:\Progetti\File-Transfer-Service\config.xml"
+$XMLPath = "config.xml"
 $xml = [xml](Get-Content $XMLPath)
 
 # Inizializzo file di log
